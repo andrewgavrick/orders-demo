@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - name: Start PostgreSQL and build Ruby environment
+        run: |
+          docker compose up -d --wait db
+          docker compose build backend
+          docker compose run --rm --no-deps backend bundle install
+      - name: Prepare test database
+        run: docker compose run --rm --no-deps -e RAILS_ENV=test backend bundle exec rails db:prepare
+      - name: All RSpec tests including concurrency
+        run: docker compose run --rm --no-deps backend bundle exec rspec
+      - name: Ruby style and autoloading
+        run: |
+          docker compose run --rm --no-deps backend bundle exec rubocop
+          docker compose run --rm --no-deps -e RAILS_ENV=test backend bundle exec rails zeitwerk:check
+      - name: Static security checks
+        run: |
+          docker compose run --rm --no-deps backend bundle exec brakeman --quiet --no-pager --exit-on-warn --exit-on-error
+          docker compose run --rm --no-deps backend bundle exec bundler-audit check --update
+      - name: Fresh database, seeds and HTTP lifecycle
+        run: |
+          docker compose run --rm --no-deps -e DATABASE_URL=postgres://orders:orders@db:5432/orders_boot_smoke backend bundle exec rails db:prepare
+          docker compose run --rm --no-deps -e DATABASE_URL=postgres://orders:orders@db:5432/orders_boot_smoke backend bundle exec rails runner --skip-executor script/verify_demo.rb
+      - name: Container logs
+        if: failure()
+        run: docker compose logs --no-color
+      - name: Stop containers
+        if: always()
+        run: docker compose down
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install, test and build
+        run: docker compose run --rm --no-deps frontend sh -c 'npm ci && npm test && npm run test:typecheck && npm run lint && npm run build'
+
