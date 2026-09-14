@@ -1,0 +1,10 @@
+**/.git
+**/node_modules
+**/vendor
+**/tmp
+**/log
+**/dist
+**/.env
+**/.env.*
+**/master.key
+**/credentials/*.key
