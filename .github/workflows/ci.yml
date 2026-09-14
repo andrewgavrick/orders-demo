@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Start PostgreSQL and build Ruby environment
         run: |
           docker compose up -d --wait db
@@ -45,7 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Install, test and build
         run: docker compose run --rm --no-deps frontend sh -c 'npm ci && npm test && npm run test:typecheck && npm run lint && npm run build'
 
