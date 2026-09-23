@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module FinancialFailure
   class InjectedFailure < StandardError; end
 
