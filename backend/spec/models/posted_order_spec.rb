@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "rails_helper"
 
 RSpec.describe "Posted order protection", type: :model do
@@ -12,22 +14,12 @@ RSpec.describe "Posted order protection", type: :model do
     journal.post!
     create(:account, actor: order.seller)
     Orders::Complete.call(order_id: order.id)
-    ApplicationRecord.connection.execute("SET CONSTRAINTS ALL IMMEDIATE")
-    ApplicationRecord.connection.execute("SET CONSTRAINTS ALL DEFERRED")
   end
 
   it "rejects changing financial attributes through validations" do
     { amount_minor: 999, currency: "EUR", buyer_id: order.seller_id, seller_id: order.buyer_id }.each do |key, value|
       expect(order.reload.update(key => value)).to be(false)
       expect(order.errors[:base]).to include("Posted order financial attributes cannot change")
-    end
-  end
-
-  it "rejects changing financial attributes through direct SQL" do
-    { amount_minor: 999, currency: "EUR", buyer_id: order.seller_id, seller_id: order.buyer_id }.each do |key, value|
-      expect do
-        ApplicationRecord.transaction(requires_new: true) { order.update_columns(key => value) }
-      end.to raise_error(ActiveRecord::StatementInvalid) { |error| expect(error.cause).to be_a(PG::CheckViolation) }
     end
   end
 

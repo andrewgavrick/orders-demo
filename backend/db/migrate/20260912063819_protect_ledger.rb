@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class ProtectLedger < ActiveRecord::Migration[8.1]
   def up
     add_column :account_transactions, :posted_at, :datetime

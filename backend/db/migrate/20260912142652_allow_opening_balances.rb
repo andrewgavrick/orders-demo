@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class AllowOpeningBalances < ActiveRecord::Migration[8.1]
   def up
     remove_check_constraint :account_transactions, name: "account_transactions_valid_kind"

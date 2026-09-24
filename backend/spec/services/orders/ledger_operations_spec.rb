@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "rails_helper"
 
 RSpec.describe "Ledger order operations", type: :model do
@@ -17,8 +19,6 @@ RSpec.describe "Ledger order operations", type: :model do
     funding.entries.create!(account: asset, direction: "debit", amount_minor: 100)
     funding.entries.create!(account: wallet, direction: "credit", amount_minor: 100)
     funding.post!
-    ApplicationRecord.connection.execute("SET CONSTRAINTS ledger_commit IMMEDIATE")
-    ApplicationRecord.connection.execute("SET CONSTRAINTS ledger_commit DEFERRED")
   end
 
   it "completes and cancels idempotently with a separate exact reversal" do

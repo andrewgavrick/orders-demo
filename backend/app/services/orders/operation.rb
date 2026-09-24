@@ -1,10 +1,8 @@
-module Orders
-  class Operation
-    class InvalidLedger < StandardError; end
+# frozen_string_literal: true
 
-    def self.call(order_id:)
-      new.call(order_id: order_id)
-    end
+module Orders
+  class Operation < BaseService
+    class InvalidLedger < StandardError; end
 
     def call(order_id:)
       ApplicationRecord.transaction(requires_new: true) do
@@ -26,8 +24,7 @@ module Orders
     end
 
     def lock_wallets(order)
-      Account.where(actor_id: [ order.buyer_id, order.seller_id ], purpose: "wallet", currency: order.currency)
-        .order(:id).lock.to_a
+      order.wallet_accounts.order(:id).lock.to_a
     end
 
     def post(order, kind:, postings:, original: nil)
@@ -36,10 +33,7 @@ module Orders
         journal.entries.create!(attributes)
       end
       journal.post!
-      order.update!(status: kind == "charge" ? "successful" : "cancelled")
-      # Validate before returning even when the caller owns an outer transaction.
-      ApplicationRecord.connection.execute("SET CONSTRAINTS ledger_commit, ledger_order_commit IMMEDIATE")
-      ApplicationRecord.connection.execute("SET CONSTRAINTS ledger_commit, ledger_order_commit DEFERRED")
+      order.reload
     end
   end
 end

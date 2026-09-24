@@ -1,3 +1,6 @@
+# frozen_string_literal: true
+
+require Rails.root.join("db/seeds/demo")
 # Run only against a disposable database created by db:prepare.
 raise "A disposable orders_boot_smoke database is required" unless ApplicationRecord.connection_db_config.database.start_with?("orders_boot_smoke")
 

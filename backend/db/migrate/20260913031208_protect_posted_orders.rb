@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class ProtectPostedOrders < ActiveRecord::Migration[8.1]
   def up
     execute <<~SQL

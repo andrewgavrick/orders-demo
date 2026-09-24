@@ -1,12 +1,10 @@
+# frozen_string_literal: true
+
 require "rails_helper"
 
-RSpec.describe "Financial database constraints", type: :model do
+RSpec.describe "Financial database constraints", type: :model, database_constraints: true do
   let(:account) { create(:account) }
   let(:order) { create(:order) }
-
-  def rejected(error = ActiveRecord::StatementInvalid, &block)
-    expect { ApplicationRecord.transaction(requires_new: true, &block) }.to raise_error(error)
-  end
 
   [ 0, -1 ].each do |amount|
     it "rejects order and entry amount #{amount} through direct SQL" do

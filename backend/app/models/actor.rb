@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class Actor < ApplicationRecord
   has_many :accounts, dependent: :restrict_with_exception
   has_many :purchases, class_name: "Order", foreign_key: :buyer_id, inverse_of: :buyer, dependent: :restrict_with_exception

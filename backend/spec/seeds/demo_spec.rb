@@ -1,4 +1,7 @@
+# frozen_string_literal: true
+
 require "rails_helper"
+require Rails.root.join("db/seeds/demo")
 
 RSpec.describe Demo::Seeds do
   before do
