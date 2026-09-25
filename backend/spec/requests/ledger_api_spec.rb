@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "rails_helper"
 
 RSpec.describe "Ledger HTTP API", type: :request do
@@ -7,30 +9,6 @@ RSpec.describe "Ledger HTTP API", type: :request do
   let(:wallet) { buyer.accounts.create!(purpose: "wallet", currency: "USD", account_type: "liability") }
   let(:recipient) { seller.accounts.create!(purpose: "wallet", currency: "USD", account_type: "liability") }
   let(:order) { Order.create!(buyer: buyer, seller: seller, amount_minor: 250, currency: "USD") }
-
-  def select_actor(actor = buyer)
-    post "/v1/session", params: { actor_id: actor.id }, as: :json
-    expect(response).to have_http_status(:created)
-  end
-
-  def error(status, code)
-    expect(response).to have_http_status(status)
-    expect(response.media_type).to eq("application/json")
-    expect(response.parsed_body.fetch("error")).to include("code" => code, "message" => a_kind_of(String))
-  end
-
-  def fund
-    wallet
-    recipient
-    asset = buyer.accounts.create!(purpose: "settlement", currency: "USD", account_type: "asset")
-    # Test fixture only; public funding is deliberately not part of this API.
-    journal = AccountTransaction.create!(kind: "opening_balance")
-    journal.entries.create!(account: asset, direction: "debit", amount_minor: 1_000)
-    journal.entries.create!(account: wallet, direction: "credit", amount_minor: 1_000)
-    journal.post!
-    ApplicationRecord.connection.execute("SET CONSTRAINTS ledger_commit IMMEDIATE")
-    ApplicationRecord.connection.execute("SET CONSTRAINTS ledger_commit DEFERRED")
-  end
 
   it "lists selectable users without exposing accounts or system actors" do
     buyer
@@ -47,18 +25,18 @@ RSpec.describe "Ledger HTTP API", type: :request do
     delete "/v1/session", as: :json
     expect(response).to have_http_status(:no_content)
     get "/v1/session", as: :json
-    error(401, "unauthorized")
+    expect_api_error(401, "unauthorized")
   end
 
   it "rejects a system actor as the selected user" do
     actor = Actor.create!(name: "System", kind: "system")
     post "/v1/session", params: { actor_id: actor.id }, as: :json
-    error(404, "not_found")
+    expect_api_error(404, "not_found")
   end
 
   it "requires a session for orders" do
     get "/v1/actors/#{buyer.id}/orders", as: :json
-    error(401, "unauthorized")
+    expect_api_error(401, "unauthorized")
   end
 
   it "returns computed integer balances for the current actor only" do
@@ -70,7 +48,7 @@ RSpec.describe "Ledger HTTP API", type: :request do
     expect(row).to include("actor_id" => buyer.id, "balance_minor" => 1_000, "currency" => "USD", "account_type" => "liability")
     expect(row.fetch("balance_minor")).to be_a(Integer)
     get "/v1/actors/#{seller.id}", as: :json
-    error(403, "forbidden")
+    expect_api_error(403, "forbidden")
   end
 
   it "creates a buyer-owned order and ignores forged owner, status and posting fields" do
@@ -94,28 +72,62 @@ RSpec.describe "Ledger HTTP API", type: :request do
       expect do
         post "/v1/actors/#{buyer.id}/orders", params: { order: { seller_id: seller.id, amount_minor: amount, currency: "USD" } }, as: :json
       end.not_to change(Order, :count)
-      error(422, "validation_error")
+      expect_api_error(422, "validation_error")
     end
   end
 
   it "rejects missing request bodies" do
     select_actor
     post "/v1/actors/#{buyer.id}/orders", params: {}, as: :json
-    error(400, "bad_request")
+    expect_api_error(400, "bad_request")
+  end
+
+  [ "invalid", [ { amount_minor: 250 } ], 250, true ].each do |body|
+    it "rejects a non-object order body #{body.inspect}" do
+      select_actor
+      post "/v1/actors/#{buyer.id}/orders", params: { order: body }, as: :json
+      expect_api_error(400, "bad_request")
+    end
+  end
+
+  it "rejects invalid currency and seller types without writing orders" do
+    select_actor
+    [ { currency: "usd" }, { currency: 123 }, { seller_id: "1" }, { seller_id: [] } ].each do |invalid|
+      attributes = { seller_id: seller.id, amount_minor: 250, currency: "USD" }.merge(invalid)
+      expect do
+        post "/v1/actors/#{buyer.id}/orders", params: { order: attributes }, as: :json
+      end.not_to change(Order, :count)
+      expect_api_error(422, "validation_error")
+    end
+  end
+
+  it "rejects creating orders for another actor before running the service" do
+    select_actor
+    expect(Orders::Create).not_to receive(:call)
+    post "/v1/actors/#{seller.id}/orders", params: { order: { seller_id: buyer.id, amount_minor: 250, currency: "USD" } }, as: :json
+    expect_api_error(403, "forbidden")
+  end
+
+  it "renders JSON collections without an Accept header" do
+    buyer
+    get "/v1/actors"
+    expect(response).to have_http_status(:ok)
+    expect(response.media_type).to eq("application/json")
+    expect(response.parsed_body.fetch("actors").pluck("id")).to include(buyer.id)
   end
 
   it "rejects an unknown seller" do
     select_actor
     post "/v1/actors/#{buyer.id}/orders", params: { order: { seller_id: -1, amount_minor: 250, currency: "USD" } }, as: :json
-    error(404, "not_found")
+    expect_api_error(404, "not_found")
   end
 
   it "rejects self purchases and missing matching wallets" do
     select_actor
     post "/v1/actors/#{buyer.id}/orders", params: { order: { seller_id: buyer.id, amount_minor: 250, currency: "USD" } }, as: :json
-    error(422, "invalid_order")
+    expect_api_error(422, "invalid_order")
     post "/v1/actors/#{buyer.id}/orders", params: { order: { seller_id: seller.id, amount_minor: 250, currency: "USD" } }, as: :json
-    error(422, "account_not_found")
+    expect_api_error(422, "account_not_found")
   end
 
   it "lists only participating orders newest first with stable pagination" do
@@ -136,7 +148,19 @@ RSpec.describe "Ledger HTTP API", type: :request do
     get "/v1/actors/#{buyer.id}/orders", as: :json
     expect(response.parsed_body.fetch("orders")).to eq([])
     get "/v1/actors/#{buyer.id}/orders", params: { page: "oops" }, headers: { "Accept" => "application/json" }
-    error(400, "bad_request")
+    expect_api_error(400, "bad_request")
+  end
+
+  it "keeps total counts on empty pages and rejects oversized pages" do
+    select_actor
+    order
+    get "/v1/actors/#{buyer.id}/orders", params: { page: 2, per_page: 1 }
+    expect(response.parsed_body.fetch("orders")).to eq([])
+    expect(response.parsed_body.fetch("meta")).to eq("page" => 2, "per_page" => 1, "total" => 1)
+    [ { page: 0 }, { page: 1_000_000 }, { per_page: 101 }, { per_page: "1.5" } ].each do |pagination|
+      get "/v1/actors/#{buyer.id}/orders", params: pagination
+      expect_api_error(400, "bad_request")
+    end
   end
 
   it "allows seller reads but only buyer mutations" do
@@ -145,9 +169,9 @@ RSpec.describe "Ledger HTTP API", type: :request do
     get "/v1/orders/#{order.id}", as: :json
     expect(response).to have_http_status(:ok)
     post "/v1/orders/#{order.id}/complete", as: :json
-    error(403, "forbidden")
+    expect_api_error(403, "forbidden")
     post "/v1/orders/#{order.id}/cancel", as: :json
-    error(403, "forbidden")
+    expect_api_error(403, "forbidden")
     expect(order.reload).to be_created
   end
 
@@ -155,11 +179,11 @@ RSpec.describe "Ledger HTTP API", type: :request do
     order
     select_actor(outsider)
     get "/v1/orders/#{order.id}", as: :json
-    error(404, "not_found")
+    expect_api_error(404, "not_found")
     post "/v1/orders/#{order.id}/complete", as: :json
-    error(404, "not_found")
+    expect_api_error(404, "not_found")
     get "/v1/actors/#{buyer.id}/transactions", as: :json
-    error(403, "forbidden")
+    expect_api_error(403, "forbidden")
   end
 
   it "runs create, complete, cancel, repeated cancel and reads the ledger through HTTP" do
@@ -199,7 +223,7 @@ RSpec.describe "Ledger HTTP API", type: :request do
     recipient
     select_actor
     post "/v1/orders/#{order.id}/complete", as: :json
-    error(422, "insufficient_funds")
+    expect_api_error(422, "insufficient_funds")
     expect(order.reload).to be_created
     expect(order.account_transactions).to be_empty
   end
@@ -211,7 +235,7 @@ RSpec.describe "Ledger HTTP API", type: :request do
     Orders::Complete.call(order_id: spending.id)
     select_actor
     post "/v1/orders/#{order.id}/cancel", as: :json
-    error(422, "insufficient_funds")
+    expect_api_error(422, "insufficient_funds")
     expect(order.reload).to be_successful
     expect(order.account_transactions.count).to eq(1)
   end
@@ -223,14 +247,14 @@ RSpec.describe "Ledger HTTP API", type: :request do
       expect(response).to have_http_status(:ok)
     end
     post "/v1/orders/#{order.id}/complete", as: :json
-    error(422, "invalid_transition")
+    expect_api_error(422, "invalid_transition")
     expect(order.account_transactions).to be_empty
   end
 
   it "returns JSON 404 for unknown orders" do
     select_actor
     post "/v1/orders/-1/complete", as: :json
-    error(404, "not_found")
+    expect_api_error(404, "not_found")
   end
 
   it "uses the versioned session for order requests" do

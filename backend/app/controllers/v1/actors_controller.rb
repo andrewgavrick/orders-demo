@@ -1,16 +1,18 @@
-class V1::ActorsController < ApiController
-  skip_before_action :require_actor!, only: :index
+# frozen_string_literal: true
 
-  def index
-    result = paginate(Actor.kind_user.order(:name, :id))
-    return unless result
-    actors, meta = result
-    render json: { actors: actors.map { |actor| actor_json(actor) }, meta: meta }
-  end
+module V1
+  class ActorsController < ApiController
+    skip_before_action :require_actor!, only: :index
+    before_action :set_own_actor, only: :show
 
-  def show
-    actor = own_actor!
-    return unless actor
-    render json: { actor: actor_json(actor), accounts: actor.accounts.order(:id).map { |account| account_json(account) } }
+    def index
+      @actors = paginate(Actor.kind_user.order(:name, :id))
+      render :index
+    end
+
+    def show
+      @accounts = @actor.accounts.order(:id)
+      render :show
+    end
   end
 end
