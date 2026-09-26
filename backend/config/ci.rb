@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Run using bin/ci inside the backend environment.
 CI.run do
   step "Prepare test database", "env RAILS_ENV=test bundle exec rails db:prepare"

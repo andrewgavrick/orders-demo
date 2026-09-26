@@ -1,6 +1,20 @@
 # Omakase Ruby styling for Rails
 inherit_gem: { rubocop-rails-omakase: rubocop.yml }
 
+AllCops:
+  TargetRubyVersion: 3.4
+  Exclude:
+    - "db/schema.rb"
+    - "tmp/**/*"
+    - "vendor/**/*"
+
+Style/ClassAndModuleChildren:
+  Enabled: true
+  EnforcedStyle: nested
+
+Style/FrozenStringLiteralComment:
+  Enabled: true
+
 # Overwrite or add rules to create your own house style
 #
 # # Use `[a, [b, c]]` not `[ a, [ b, c ] ]`
