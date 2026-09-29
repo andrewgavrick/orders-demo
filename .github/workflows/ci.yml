@@ -8,6 +8,17 @@ permissions:
   contents: read
 
 jobs:
+  commit-messages:
+    name: Commit messages
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Validate commit subjects
+        run: node .github/scripts/check-commit-messages.cjs
+
   backend:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -34,6 +45,10 @@ jobs:
         run: |
           docker compose run --rm --no-deps -e DATABASE_URL=postgres://orders:orders@db:5432/orders_boot_smoke backend bundle exec rails db:prepare
           docker compose run --rm --no-deps -e DATABASE_URL=postgres://orders:orders@db:5432/orders_boot_smoke backend bundle exec rails runner --skip-executor script/verify_demo.rb
+      - name: Upgrade existing ledger data without triggers
+        run: |
+          docker compose run --rm --no-deps -e DATABASE_URL=postgres://orders:orders@db:5432/orders_boot_smoke_upgrade backend bundle exec rails db:create
+          docker compose run --rm --no-deps -e DATABASE_URL=postgres://orders:orders@db:5432/orders_boot_smoke_upgrade backend bundle exec rails runner --skip-executor script/verify_upgrade.rb
       - name: Container logs
         if: failure()
         run: docker compose logs --no-color
