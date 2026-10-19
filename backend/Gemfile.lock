@@ -115,7 +115,7 @@ GEM
     jbuilder (2.15.1)
       actionview (>= 7.0.0)
       activesupport (>= 7.0.0)
-    json (2.21.2)
+    json (3.1.0)
     kaminari (1.2.2)
       activesupport (>= 4.1.0)
       kaminari-actionview (= 1.2.2)
@@ -330,7 +330,7 @@ DEPENDENCIES
   debug
   factory_bot_rails (~> 6.5)
   jbuilder (~> 2.14)
-  json (~> 2.0)
+  json (~> 3.1)
   kaminari (~> 1.2)
   pg (~> 1.1)
   puma (>= 5.0)
